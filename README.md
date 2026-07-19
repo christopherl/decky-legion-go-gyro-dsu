@@ -80,7 +80,7 @@ Decky Loader expects the distributable plugin to contain:
 ```text
 dist/index.js
 main.py
-dsu_client.py
+py_modules/dsu_client.py
 package.json
 plugin.json
 LICENSE

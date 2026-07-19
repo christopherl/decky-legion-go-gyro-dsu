@@ -1,15 +1,51 @@
 import importlib
 import sys
 import unittest
+from pathlib import Path
+from subprocess import CompletedProcess
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "py_modules"))
 sys.modules.setdefault("decky", SimpleNamespace(logger=Mock()))
 plugin_module = importlib.import_module("main")
 
 
 class ServiceStatusTests(unittest.IsolatedAsyncioTestCase):
+    async def test_systemctl_uses_absolute_noninteractive_command(self):
+        completed = CompletedProcess([], 0, "loaded\n", "")
+        with patch.object(plugin_module.subprocess, "run", return_value=completed) as run:
+            result = await plugin_module.run_systemctl(
+                "show", plugin_module.SERVICE_NAME
+            )
+
+        self.assertEqual(result, (0, "loaded", ""))
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/systemctl")
+        self.assertIn("--no-pager", command)
+        self.assertIn("--no-ask-password", command)
+
+    async def test_systemctl_restores_library_path_outside_pyinstaller(self):
+        completed = CompletedProcess([], 0, "loaded\n", "")
+        environment = {
+            "LD_LIBRARY_PATH": "/tmp/_MEI12345",
+            "LD_LIBRARY_PATH_ORIG": "/usr/local/lib",
+            "LD_PRELOAD": "/tmp/injected.so",
+        }
+        with (
+            patch.dict(plugin_module.os.environ, environment, clear=True),
+            patch.object(
+                plugin_module.subprocess, "run", return_value=completed
+            ) as run,
+        ):
+            await plugin_module.run_systemctl("show", plugin_module.SERVICE_NAME)
+
+        child_environment = run.call_args.kwargs["env"]
+        self.assertEqual(child_environment["LD_LIBRARY_PATH"], "/usr/local/lib")
+        self.assertNotIn("LD_LIBRARY_PATH_ORIG", child_environment)
+        self.assertNotIn("LD_PRELOAD", child_environment)
+
     async def test_reports_active_installed_service(self):
         responses = [
             (0, "loaded", ""),

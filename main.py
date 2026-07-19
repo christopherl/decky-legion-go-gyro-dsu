@@ -1,21 +1,15 @@
 import asyncio
-import sys
+import os
+import subprocess
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 import decky
-
-# Decky loads main.py directly and does not guarantee that the plugin directory
-# is present in sys.path. Add the loader-provided path before importing sibling
-# backend modules such as dsu_client.py.
-PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", str(Path(__file__).resolve().parent))
-if PLUGIN_DIR not in sys.path:
-    sys.path.insert(0, PLUGIN_DIR)
 
 from dsu_client import DSUMotionClient
 
 
 SERVICE_NAME = "lgsdsu.service"
+SYSTEMCTL_PATH = "/usr/bin/systemctl"
 COMMAND_TIMEOUT_SECONDS = 10
 
 
@@ -28,26 +22,32 @@ class ServiceStatus:
 
 
 async def run_systemctl(*arguments: str) -> tuple[int, str, str]:
-    """Run systemctl without a shell and return its exit code and output."""
-    process = await asyncio.create_subprocess_exec(
-        "systemctl",
-        *arguments,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    """Run systemctl outside Decky's event loop and return its result."""
+    environment = os.environ.copy()
+    original_library_path = environment.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original_library_path is None:
+        environment.pop("LD_LIBRARY_PATH", None)
+    else:
+        environment["LD_LIBRARY_PATH"] = original_library_path
+    environment.pop("LD_PRELOAD", None)
+
     try:
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(), timeout=COMMAND_TIMEOUT_SECONDS
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [SYSTEMCTL_PATH, "--no-pager", "--no-ask-password", *arguments],
+            capture_output=True,
+            text=True,
+            env=environment,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+            check=False,
         )
-    except TimeoutError:
-        process.kill()
-        await process.wait()
+    except subprocess.TimeoutExpired:
         raise RuntimeError("systemctl timed out") from None
 
     return (
-        process.returncode,
-        stdout.decode(errors="replace").strip(),
-        stderr.decode(errors="replace").strip(),
+        result.returncode,
+        result.stdout.strip(),
+        result.stderr.strip(),
     )
 
 
