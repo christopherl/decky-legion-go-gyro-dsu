@@ -90,12 +90,16 @@ def parse_motion_packet(packet: bytes) -> MotionData | None:
     if slot != 0 or state != 2 or connected != 1:
         return None
 
-    # DSU names the final fields pitch, yaw and roll. LegionGoSGyroDSU maps
-    # physical X to pitch, Y to roll, and Z to yaw.
+    # DSU names the final three gyro fields pitch, yaw and roll -- the human
+    # motion each one measures, not this filter's internal x/y/z labels.
+    # LegionGoSGyroDSU's legion-hid source sends them unswapped (pitch=raw
+    # X, yaw=raw Y, roll=raw Z), so read them back directly into the
+    # (roll, pitch, yaw) order OrientationFilter's quaternion math expects
+    # for its x, y, z components.
     return MotionData(
         timestamp_us=fields[9],
         acceleration=(fields[10], fields[11], fields[12]),
-        gyroscope=(fields[13], fields[15], fields[14]),
+        gyroscope=(fields[15], fields[13], fields[14]),
     )
 
 

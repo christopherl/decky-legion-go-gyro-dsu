@@ -10,7 +10,8 @@ def make_motion_response(
     acceleration=(0.0, 0.0, 1.0),
     gyroscope=(0.0, 0.0, 0.0),
 ):
-    # The wire order is pitch (X), yaw (Z), roll (Y).
+    # The wire order is pitch, yaw, roll (LegionGoSGyroDSU's legion-hid
+    # source sends these unswapped).
     payload = dsu_client.CONTROLLER_DATA.pack(
         0,
         2,
@@ -23,9 +24,7 @@ def make_motion_response(
         b"\0" * 32,
         timestamp_us,
         *acceleration,
-        gyroscope[0],
-        gyroscope[2],
-        gyroscope[1],
+        *gyroscope,
     )
     packet = bytearray(
         dsu_client.HEADER.pack(
@@ -59,14 +58,14 @@ class DSUPacketTests(unittest.TestCase):
         motion = dsu_client.parse_motion_packet(
             make_motion_response(
                 acceleration=(1.25, -2.5, 3.75),
-                gyroscope=(10.0, 20.0, 30.0),
+                gyroscope=(10.0, 20.0, 30.0),  # pitch, yaw, roll on the wire
             )
         )
 
         self.assertIsNotNone(motion)
         self.assertEqual(motion.timestamp_us, 1_000_000)
         self.assertEqual(motion.acceleration, (1.25, -2.5, 3.75))
-        self.assertEqual(motion.gyroscope, (10.0, 20.0, 30.0))
+        self.assertEqual(motion.gyroscope, (30.0, 10.0, 20.0))  # roll, pitch, yaw
 
     def test_rejects_corrupted_packet(self):
         packet = bytearray(make_motion_response())
