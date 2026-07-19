@@ -1,6 +1,6 @@
 {
   "name": "decky-legion-go-gyro-dsu",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Decky Loader control and live motion view for LegionGoSGyroDSU",
   "type": "module",
   "scripts": {

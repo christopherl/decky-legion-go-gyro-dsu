@@ -1,4 +1,5 @@
 import asyncio
+import os
 import subprocess
 from dataclasses import asdict, dataclass
 
@@ -22,12 +23,21 @@ class ServiceStatus:
 
 async def run_systemctl(*arguments: str) -> tuple[int, str, str]:
     """Run systemctl outside Decky's event loop and return its result."""
+    environment = os.environ.copy()
+    original_library_path = environment.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original_library_path is None:
+        environment.pop("LD_LIBRARY_PATH", None)
+    else:
+        environment["LD_LIBRARY_PATH"] = original_library_path
+    environment.pop("LD_PRELOAD", None)
+
     try:
         result = await asyncio.to_thread(
             subprocess.run,
             [SYSTEMCTL_PATH, "--no-pager", "--no-ask-password", *arguments],
             capture_output=True,
             text=True,
+            env=environment,
             timeout=COMMAND_TIMEOUT_SECONDS,
             check=False,
         )
