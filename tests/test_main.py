@@ -1,10 +1,12 @@
 import importlib
 import sys
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "py_modules"))
 sys.modules.setdefault("decky", SimpleNamespace(logger=Mock()))
 plugin_module = importlib.import_module("main")
 

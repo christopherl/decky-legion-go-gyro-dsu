@@ -20,6 +20,7 @@ class BackendImportTests(unittest.TestCase):
 
             plugin_dir = {str(PROJECT_DIR)!r}
             sys.path = [path for path in sys.path if path not in ("", plugin_dir)]
+            sys.path.append(f"{{plugin_dir}}/py_modules")
             sys.modules["decky"] = types.SimpleNamespace(
                 DECKY_PLUGIN_DIR=plugin_dir,
                 logger=logging.getLogger("decky-test"),
