@@ -177,7 +177,9 @@ function Content() {
     }
   };
 
-  const description = !status.installed
+  const description = status.error
+    ? status.error
+    : !status.installed
     ? "lgsdsu.service is not installed"
     : busy
       ? status.state === "loading" ? "Checking service status…" : `${status.state}…`

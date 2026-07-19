@@ -1,4 +1,5 @@
 import asyncio
+import subprocess
 from dataclasses import asdict, dataclass
 
 import decky
@@ -7,6 +8,7 @@ from dsu_client import DSUMotionClient
 
 
 SERVICE_NAME = "lgsdsu.service"
+SYSTEMCTL_PATH = "/usr/bin/systemctl"
 COMMAND_TIMEOUT_SECONDS = 10
 
 
@@ -19,26 +21,23 @@ class ServiceStatus:
 
 
 async def run_systemctl(*arguments: str) -> tuple[int, str, str]:
-    """Run systemctl without a shell and return its exit code and output."""
-    process = await asyncio.create_subprocess_exec(
-        "systemctl",
-        *arguments,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    """Run systemctl outside Decky's event loop and return its result."""
     try:
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(), timeout=COMMAND_TIMEOUT_SECONDS
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [SYSTEMCTL_PATH, "--no-pager", "--no-ask-password", *arguments],
+            capture_output=True,
+            text=True,
+            timeout=COMMAND_TIMEOUT_SECONDS,
+            check=False,
         )
-    except TimeoutError:
-        process.kill()
-        await process.wait()
+    except subprocess.TimeoutExpired:
         raise RuntimeError("systemctl timed out") from None
 
     return (
-        process.returncode,
-        stdout.decode(errors="replace").strip(),
-        stderr.decode(errors="replace").strip(),
+        result.returncode,
+        result.stdout.strip(),
+        result.stderr.strip(),
     )
 
 

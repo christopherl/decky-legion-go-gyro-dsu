@@ -2,6 +2,7 @@ import importlib
 import sys
 import unittest
 from pathlib import Path
+from subprocess import CompletedProcess
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -12,6 +13,19 @@ plugin_module = importlib.import_module("main")
 
 
 class ServiceStatusTests(unittest.IsolatedAsyncioTestCase):
+    async def test_systemctl_uses_absolute_noninteractive_command(self):
+        completed = CompletedProcess([], 0, "loaded\n", "")
+        with patch.object(plugin_module.subprocess, "run", return_value=completed) as run:
+            result = await plugin_module.run_systemctl(
+                "show", plugin_module.SERVICE_NAME
+            )
+
+        self.assertEqual(result, (0, "loaded", ""))
+        command = run.call_args.args[0]
+        self.assertEqual(command[0], "/usr/bin/systemctl")
+        self.assertIn("--no-pager", command)
+        self.assertIn("--no-ask-password", command)
+
     async def test_reports_active_installed_service(self):
         responses = [
             (0, "loaded", ""),
