@@ -3,10 +3,26 @@
 A small Decky Loader plugin for controlling `LegionGoSGyroDSU` from the Steam
 Quick Access menu and visualizing the handheld's orientation in real time.
 
+## Required DSU server
+
+This plugin is a companion frontend for
+[LegionGoSGyroDSU](https://github.com/Sooly890/LegionGoSGyroDSU), the original
+open source project by Sooly890. LegionGoSGyroDSU provides the background
+service, reads the motion sensors and exposes their data through a DSU server.
+This Decky plugin only controls that service and optionally visualizes its DSU
+motion data.
+
+The Legion Go 2 HID motion backend is currently being developed in
+[christopherl's LegionGoSGyroDSU fork](https://github.com/christopherl/LegionGoSGyroDSU/tree/feature/legion-hid-motion-source).
+Until that work is accepted upstream, Legion Go 2 users need to install the
+`feature/legion-hid-motion-source` branch from that fork. Legion Go S users can
+use the original upstream project.
+
 ## Requirements
 
 - Decky Loader
-- LegionGoSGyroDSU installed as `lgsdsu.service`
+- [LegionGoSGyroDSU](https://github.com/Sooly890/LegionGoSGyroDSU) installed as
+  `lgsdsu.service` (or the Legion Go 2 feature branch linked above)
 - systemd
 
 The plugin requests Decky's root backend because controlling a system service
