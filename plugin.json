@@ -5,7 +5,7 @@
   "api_version": 1,
   "publish": {
     "tags": ["legion-go", "gyro", "dsu", "service"],
-    "description": "Start and stop the LegionGoSGyroDSU background service from Decky Loader.",
+    "description": "Control LegionGoSGyroDSU and visualize the handheld's orientation live.",
     "image": "https://opengraph.githubassets.com/1/christopherl/LegionGoSGyroDSU"
   }
 }
