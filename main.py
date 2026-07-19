@@ -1,7 +1,16 @@
 import asyncio
+import sys
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import decky
+
+# Decky loads main.py directly and does not guarantee that the plugin directory
+# is present in sys.path. Add the loader-provided path before importing sibling
+# backend modules such as dsu_client.py.
+PLUGIN_DIR = getattr(decky, "DECKY_PLUGIN_DIR", str(Path(__file__).resolve().parent))
+if PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, PLUGIN_DIR)
 
 from dsu_client import DSUMotionClient
 
