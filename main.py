@@ -1,57 +1,94 @@
-import os
-
-# The decky plugin module is located at decky-loader/plugin
-# For easy intellisense checkout the decky-loader code repo
-# and add the `decky-loader/plugin/imports` path to `python.analysis.extraPaths` in `.vscode/settings.json`
-import decky
 import asyncio
+from dataclasses import asdict, dataclass
+
+import decky
+
+
+SERVICE_NAME = "lgsdsu.service"
+COMMAND_TIMEOUT_SECONDS = 10
+
+
+@dataclass
+class ServiceStatus:
+    installed: bool
+    active: bool
+    state: str
+    error: str | None = None
+
+
+async def run_systemctl(*arguments: str) -> tuple[int, str, str]:
+    """Run systemctl without a shell and return its exit code and output."""
+    process = await asyncio.create_subprocess_exec(
+        "systemctl",
+        *arguments,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(), timeout=COMMAND_TIMEOUT_SECONDS
+        )
+    except TimeoutError:
+        process.kill()
+        await process.wait()
+        raise RuntimeError("systemctl timed out") from None
+
+    return (
+        process.returncode,
+        stdout.decode(errors="replace").strip(),
+        stderr.decode(errors="replace").strip(),
+    )
+
+
+async def read_service_status() -> ServiceStatus:
+    load_code, load_state, load_error = await run_systemctl(
+        "show", SERVICE_NAME, "--property=LoadState", "--value"
+    )
+    if load_code != 0 or load_state in {"", "not-found"}:
+        message = load_error or f"{SERVICE_NAME} is not installed"
+        return ServiceStatus(False, False, "not-installed", message)
+
+    active_code, active_state, active_error = await run_systemctl(
+        "is-active", SERVICE_NAME
+    )
+    active = active_code == 0 and active_state == "active"
+    error = active_error if active_code not in {0, 3} and active_error else None
+    return ServiceStatus(True, active, active_state or "unknown", error)
+
 
 class Plugin:
-    # A normal method. It can be called from the TypeScript side using @decky/api.
-    async def add(self, left: int, right: int) -> int:
-        return left + right
+    async def get_service_status(self) -> dict:
+        try:
+            return asdict(await read_service_status())
+        except Exception as error:
+            decky.logger.exception("Unable to read %s status", SERVICE_NAME)
+            return asdict(ServiceStatus(False, False, "error", str(error)))
 
-    async def long_running(self):
-        await asyncio.sleep(15)
-        # Passing through a bunch of random data, just as an example
-        await decky.emit("timer_event", "Hello from the backend!", True, 2)
+    async def set_service_enabled(self, enabled: bool) -> dict:
+        if not isinstance(enabled, bool):
+            return asdict(
+                ServiceStatus(False, False, "error", "enabled must be a boolean")
+            )
 
-    # Asyncio-compatible long-running code, executed in a task when the plugin is loaded
+        current = await read_service_status()
+        if not current.installed:
+            return asdict(current)
+
+        action = "start" if enabled else "stop"
+        code, _, error = await run_systemctl(action, SERVICE_NAME)
+        if code != 0:
+            message = error or f"systemctl {action} failed with exit code {code}"
+            decky.logger.error("Unable to %s %s: %s", action, SERVICE_NAME, message)
+            return asdict(ServiceStatus(True, current.active, "error", message))
+
+        result = await read_service_status()
+        if result.active != enabled:
+            expected = "active" if enabled else "inactive"
+            result.error = f"Expected {expected}, but service is {result.state}"
+        return asdict(result)
+
     async def _main(self):
-        self.loop = asyncio.get_event_loop()
-        decky.logger.info("Hello World!")
+        decky.logger.info("Legion Go Gyro DSU controller loaded")
 
-    # Function called first during the unload process, utilize this to handle your plugin being stopped, but not
-    # completely removed
     async def _unload(self):
-        decky.logger.info("Goodnight World!")
-        pass
-
-    # Function called after `_unload` during uninstall, utilize this to clean up processes and other remnants of your
-    # plugin that may remain on the system
-    async def _uninstall(self):
-        decky.logger.info("Goodbye World!")
-        pass
-
-    async def start_timer(self):
-        self.loop.create_task(self.long_running())
-
-    # Migrations that should be performed before entering `_main()`.
-    async def _migration(self):
-        decky.logger.info("Migrating")
-        # Here's a migration example for logs:
-        # - `~/.config/decky-template/template.log` will be migrated to `decky.decky_LOG_DIR/template.log`
-        decky.migrate_logs(os.path.join(decky.DECKY_USER_HOME,
-                                               ".config", "decky-template", "template.log"))
-        # Here's a migration example for settings:
-        # - `~/homebrew/settings/template.json` is migrated to `decky.decky_SETTINGS_DIR/template.json`
-        # - `~/.config/decky-template/` all files and directories under this root are migrated to `decky.decky_SETTINGS_DIR/`
-        decky.migrate_settings(
-            os.path.join(decky.DECKY_HOME, "settings", "template.json"),
-            os.path.join(decky.DECKY_USER_HOME, ".config", "decky-template"))
-        # Here's a migration example for runtime data:
-        # - `~/homebrew/template/` all files and directories under this root are migrated to `decky.decky_RUNTIME_DIR/`
-        # - `~/.local/share/decky-template/` all files and directories under this root are migrated to `decky.decky_RUNTIME_DIR/`
-        decky.migrate_runtime(
-            os.path.join(decky.DECKY_HOME, "template"),
-            os.path.join(decky.DECKY_USER_HOME, ".local", "share", "decky-template"))
+        decky.logger.info("Legion Go Gyro DSU controller unloaded")
