@@ -58,7 +58,7 @@ const faceStyle = {
 };
 
 function DeviceModel({ orientation }: { orientation: Orientation }) {
-  const transform = `rotateX(${orientation.pitch.toFixed(2)}deg) rotateY(${orientation.yaw.toFixed(2)}deg) rotateZ(${(-orientation.roll).toFixed(2)}deg)`;
+  const transform = `rotateX(${orientation.pitch.toFixed(2)}deg) rotateY(${(-orientation.yaw).toFixed(2)}deg) rotateZ(${(-orientation.roll).toFixed(2)}deg)`;
   return (
     <div style={viewerStyle}>
       <div style={{ ...deviceStyle, transform }}>
