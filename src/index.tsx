@@ -47,7 +47,14 @@ const deviceStyle = {
   height: "72px",
   position: "relative" as const,
   transformStyle: "preserve-3d" as const,
+  transformOrigin: "50% 50%",
   transition: "transform 45ms linear",
+};
+
+const faceStyle = {
+  position: "absolute" as const,
+  boxSizing: "border-box" as const,
+  backfaceVisibility: "hidden" as const,
 };
 
 function DeviceModel({ orientation }: { orientation: Orientation }) {
@@ -55,15 +62,26 @@ function DeviceModel({ orientation }: { orientation: Orientation }) {
   return (
     <div style={viewerStyle}>
       <div style={{ ...deviceStyle, transform }}>
-        <div style={{ position: "absolute", inset: "8px 25px", borderRadius: "8px", background: "#242b35", border: "2px solid #748293", boxShadow: "0 9px 18px rgba(0,0,0,.45)" }}>
-          <div style={{ position: "absolute", inset: "7px 10px", borderRadius: "3px", background: "linear-gradient(135deg, #387cc7, #67d3ca)" }} />
+        <div style={{ ...faceStyle, inset: 0, transform: "translateZ(9px)", borderRadius: "16px", background: "#171d25", boxShadow: "0 12px 22px rgba(0,0,0,.5)" }}>
+          <div style={{ position: "absolute", inset: "8px 25px", borderRadius: "8px", background: "#242b35", border: "2px solid #748293" }}>
+            <div style={{ position: "absolute", inset: "7px 10px", borderRadius: "3px", background: "linear-gradient(135deg, #387cc7, #67d3ca)" }} />
+          </div>
+          <div style={{ position: "absolute", left: 0, top: 3, width: 35, height: 66, borderRadius: "16px 6px 6px 16px", background: "#202732", border: "2px solid #748293" }}>
+            <div style={{ position: "absolute", left: 10, top: 16, width: 13, height: 13, borderRadius: "50%", background: "#0d1117", border: "2px solid #8995a3" }} />
+          </div>
+          <div style={{ position: "absolute", right: 0, top: 3, width: 35, height: 66, borderRadius: "6px 16px 16px 6px", background: "#202732", border: "2px solid #748293" }}>
+            <div style={{ position: "absolute", right: 10, top: 31, width: 13, height: 13, borderRadius: "50%", background: "#0d1117", border: "2px solid #8995a3" }} />
+          </div>
         </div>
-        <div style={{ position: "absolute", left: 0, top: 3, width: 35, height: 66, borderRadius: "16px 6px 6px 16px", background: "#202732", border: "2px solid #748293" }}>
-          <div style={{ position: "absolute", left: 10, top: 16, width: 13, height: 13, borderRadius: "50%", background: "#0d1117", border: "2px solid #8995a3" }} />
+        <div style={{ ...faceStyle, inset: 0, transform: "rotateY(180deg) translateZ(9px)", borderRadius: "16px", background: "linear-gradient(145deg, #11161d, #2d3743)", border: "2px solid #596573" }}>
+          <div style={{ position: "absolute", inset: "13px 42px", borderRadius: "6px", border: "1px solid #46515d", background: "#181f27" }} />
         </div>
-        <div style={{ position: "absolute", right: 0, top: 3, width: 35, height: 66, borderRadius: "6px 16px 16px 6px", background: "#202732", border: "2px solid #748293" }}>
-          <div style={{ position: "absolute", right: 10, top: 31, width: 13, height: 13, borderRadius: "50%", background: "#0d1117", border: "2px solid #8995a3" }} />
+        <div style={{ ...faceStyle, left: 0, top: 27, width: 176, height: 18, transform: "rotateX(90deg) translateZ(36px)", background: "linear-gradient(90deg, #27313c, #657789, #27313c)", border: "1px solid #8291a0" }}>
+          <div style={{ position: "absolute", left: 68, right: 68, top: 2, height: 3, borderRadius: "2px", background: "#69e0d2", boxShadow: "0 0 5px rgba(105,224,210,.8)" }} />
         </div>
+        <div style={{ ...faceStyle, left: 0, top: 27, width: 176, height: 18, transform: "rotateX(-90deg) translateZ(36px)", background: "#111820", border: "1px solid #3d4854" }} />
+        <div style={{ ...faceStyle, left: 79, top: 0, width: 18, height: 72, transform: "rotateY(-90deg) translateZ(88px)", background: "linear-gradient(#303b47, #151b22)", border: "1px solid #596675" }} />
+        <div style={{ ...faceStyle, left: 79, top: 0, width: 18, height: 72, transform: "rotateY(90deg) translateZ(88px)", background: "linear-gradient(#303b47, #151b22)", border: "1px solid #596675" }} />
       </div>
     </div>
   );
