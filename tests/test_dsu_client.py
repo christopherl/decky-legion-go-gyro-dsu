@@ -68,7 +68,7 @@ class DSUPacketTests(unittest.TestCase):
         self.assertIsNotNone(motion)
         self.assertEqual(motion.timestamp_us, 1_000_000)
         self.assertEqual(motion.acceleration, (1.25, -2.5, 3.75))
-        self.assertEqual(motion.gyroscope, (30.0, 10.0, 20.0))  # roll, pitch, yaw
+        self.assertEqual(motion.gyroscope, (10.0, 20.0, 30.0))  # sensor X, Y, Z
 
     def test_rejects_corrupted_packet(self):
         packet = bytearray(make_motion_response())
@@ -97,23 +97,43 @@ class OrientationFilterTests(unittest.TestCase):
         self.assertAlmostEqual(orientation["pitch"], 0.0, places=5)
         self.assertAlmostEqual(orientation["yaw"], 0.0, places=5)
 
-    def test_integrates_gyro_and_recenters(self):
+    def test_maps_sensor_axes_to_device_rotations(self):
+        cases = (
+            ((90.0, 0.0, 0.0), "pitch"),
+            ((0.0, 90.0, 0.0), "yaw"),
+            ((0.0, 0.0, 90.0), "roll"),
+        )
+        for gyroscope, expected_rotation in cases:
+            with self.subTest(rotation=expected_rotation):
+                estimator = dsu_client.OrientationFilter()
+                estimator.update(
+                    dsu_client.MotionData(1_000_000, (0.0, 0.0, 0.0), gyroscope),
+                    now=1.0,
+                )
+                orientation = estimator.update(
+                    dsu_client.MotionData(1_100_000, (0.0, 0.0, 0.0), gyroscope),
+                    now=1.1,
+                )
+                self.assertGreater(orientation[expected_rotation], 8.0)
+                for rotation in {"roll", "pitch", "yaw"} - {expected_rotation}:
+                    self.assertAlmostEqual(orientation[rotation], 0.0, places=5)
+
+    def test_recenters_orientation(self):
         estimator = dsu_client.OrientationFilter()
         estimator.update(
             dsu_client.MotionData(1_000_000, (0.0, 0.0, 1.0), (0.0, 0.0, 90.0)),
             now=1.0,
         )
-        orientation = estimator.update(
+        estimator.update(
             dsu_client.MotionData(1_100_000, (0.0, 0.0, 1.0), (0.0, 0.0, 90.0)),
             now=1.1,
         )
-        self.assertGreater(orientation["yaw"], 8.0)
         estimator.recenter()
         orientation = estimator.update(
             dsu_client.MotionData(1_100_000, (0.0, 0.0, 1.0), (0.0, 0.0, 0.0)),
             now=1.1,
         )
-        self.assertAlmostEqual(orientation["yaw"], 0.0, places=5)
+        self.assertAlmostEqual(orientation["roll"], 0.0, places=5)
 
 
 if __name__ == "__main__":

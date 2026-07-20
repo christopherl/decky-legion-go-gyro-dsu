@@ -90,16 +90,15 @@ def parse_motion_packet(packet: bytes) -> MotionData | None:
     if slot != 0 or state != 2 or connected != 1:
         return None
 
-    # DSU names the final three gyro fields pitch, yaw and roll -- the human
-    # motion each one measures, not this filter's internal x/y/z labels.
-    # LegionGoSGyroDSU's legion-hid source sends them unswapped (pitch=raw
-    # X, yaw=raw Y, roll=raw Z), so read them back directly into the
-    # (roll, pitch, yaw) order OrientationFilter's quaternion math expects
-    # for its x, y, z components.
+    # DSU stores angular velocity as pitch, yaw and roll, corresponding to
+    # rotations around the sensor X, Y and Z axes. Keep both accelerometer and
+    # gyroscope in that common X/Y/Z sensor frame for quaternion integration.
+    # Human-readable pitch/yaw/roll labels are assigned only to the resulting
+    # orientation below.
     return MotionData(
         timestamp_us=fields[9],
         acceleration=(fields[10], fields[11], fields[12]),
-        gyroscope=(fields[15], fields[13], fields[14]),
+        gyroscope=(fields[13], fields[14], fields[15]),
     )
 
 
@@ -197,11 +196,11 @@ class OrientationFilter:
                 tuple(value + delta * dt for value, delta in zip(self._quaternion, derivative))
             )
 
-        roll, pitch, yaw = self._euler(self._quaternion)
+        rotation_x, rotation_y, rotation_z = self._euler(self._quaternion)
         return {
-            "roll": roll - self._zero[0],
-            "pitch": pitch - self._zero[1],
-            "yaw": yaw - self._zero[2],
+            "pitch": rotation_x - self._zero[0],
+            "yaw": rotation_y - self._zero[1],
+            "roll": rotation_z - self._zero[2],
         }
 
     def recenter(self) -> None:
