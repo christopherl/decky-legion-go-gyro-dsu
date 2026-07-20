@@ -33,6 +33,10 @@ SUBSCRIPTION_INTERVAL_SECONDS = 1.0
 SOCKET_POLL_SECONDS = 0.25
 CONNECTION_TIMEOUT_SECONDS = 2.0
 MAX_OUTPUT_RATE_HZ = 30.0
+# Eden's Cemuhook client normalizes DSU gyro values so that 312 protocol units
+# represent one revolution per second. Preserve that established client
+# behavior for a preview that matches the emulator's controller-settings cube.
+DSU_GYRO_DEGREES_SCALE = 360.0 / 312.0
 
 
 @dataclass(frozen=True)
@@ -90,15 +94,19 @@ def parse_motion_packet(packet: bytes) -> MotionData | None:
     if slot != 0 or state != 2 or connected != 1:
         return None
 
-    # DSU stores angular velocity as pitch, yaw and roll, corresponding to
-    # rotations around the sensor X, Y and Z axes. Keep both accelerometer and
-    # gyroscope in that common X/Y/Z sensor frame for quaternion integration.
-    # Human-readable pitch/yaw/roll labels are assigned only to the resulting
-    # orientation below.
+    # Convert the Cemuhook wire convention into the orientation frame used by
+    # Eden's controller preview. The accelerometer and gyro transforms look
+    # different because DSU names gyro fields by rotations rather than axes.
+    pitch, yaw, roll = fields[13], fields[14], fields[15]
+    accel_x, accel_y, accel_z = fields[10], fields[11], fields[12]
     return MotionData(
         timestamp_us=fields[9],
-        acceleration=(fields[10], fields[11], fields[12]),
-        gyroscope=(fields[13], fields[14], fields[15]),
+        acceleration=(-accel_x, -accel_z, -accel_y),
+        gyroscope=(
+            -pitch * DSU_GYRO_DEGREES_SCALE,
+            roll * DSU_GYRO_DEGREES_SCALE,
+            yaw * DSU_GYRO_DEGREES_SCALE,
+        ),
     )
 
 
@@ -109,14 +117,16 @@ class OrientationFilter:
     relative to the most recent recenter action and may drift slowly over time.
     """
 
-    ACCEL_CORRECTION_PER_SECOND = 1.5
+    ACCEL_CORRECTION_PER_SECOND = 0.3
+    MIN_RELIABLE_ACCEL_G = 0.75
+    MAX_RELIABLE_ACCEL_G = 1.25
     MAX_DT_SECONDS = 0.1
 
     def __init__(self) -> None:
         self._quaternion = (1.0, 0.0, 0.0, 0.0)
         self._last_timestamp_us: int | None = None
         self._last_monotonic: float | None = None
-        self._zero = (0.0, 0.0, 0.0)
+        self._zero_inverse = (1.0, 0.0, 0.0, 0.0)
         self._initialized = False
 
     @staticmethod
@@ -146,6 +156,20 @@ class OrientationFilter:
             cr * cp * sy - sr * sp * cy,
         )
 
+    @staticmethod
+    def _multiply(
+        left: tuple[float, float, float, float],
+        right: tuple[float, float, float, float],
+    ) -> tuple[float, float, float, float]:
+        lw, lx, ly, lz = left
+        rw, rx, ry, rz = right
+        return (
+            lw * rw - lx * rx - ly * ry - lz * rz,
+            lw * rx + lx * rw + ly * rz - lz * ry,
+            lw * ry - lx * rz + ly * rw + lz * rx,
+            lw * rz + lx * ry - ly * rx + lz * rw,
+        )
+
     def _dt(self, timestamp_us: int, now: float) -> float | None:
         dt = None
         if self._last_timestamp_us is not None and timestamp_us > self._last_timestamp_us:
@@ -160,6 +184,7 @@ class OrientationFilter:
 
     def update(self, motion: MotionData, now: float | None = None) -> dict[str, float]:
         now = time.monotonic() if now is None else now
+        accel_length = math.sqrt(sum(value * value for value in motion.acceleration))
         ax, ay, az = self._normalized(motion.acceleration)
         if not self._initialized and any((ax, ay, az)):
             roll = math.atan2(ay, az)
@@ -178,7 +203,7 @@ class OrientationFilter:
                 2 * (w * x + y * z),
                 w * w - x * x - y * y + z * z,
             )
-            if any((ax, ay, az)):
+            if self.MIN_RELIABLE_ACCEL_G <= accel_length <= self.MAX_RELIABLE_ACCEL_G:
                 ex = ay * gravity[2] - az * gravity[1]
                 ey = az * gravity[0] - ax * gravity[2]
                 ez = ax * gravity[1] - ay * gravity[0]
@@ -196,15 +221,17 @@ class OrientationFilter:
                 tuple(value + delta * dt for value, delta in zip(self._quaternion, derivative))
             )
 
-        rotation_x, rotation_y, rotation_z = self._euler(self._quaternion)
+        relative = self._normalized(self._multiply(self._zero_inverse, self._quaternion))
+        rotation_x, rotation_y, rotation_z = self._euler(relative)
         return {
-            "pitch": rotation_x - self._zero[0],
-            "yaw": rotation_y - self._zero[1],
-            "roll": rotation_z - self._zero[2],
+            "pitch": rotation_x,
+            "yaw": rotation_y,
+            "roll": rotation_z,
         }
 
     def recenter(self) -> None:
-        self._zero = self._euler(self._quaternion)
+        w, x, y, z = self._normalized(self._quaternion)
+        self._zero_inverse = (w, -x, -y, -z)
 
 
 class DSUMotionClient:
